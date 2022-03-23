@@ -229,7 +229,7 @@ func (ctlr *Controller) processRoutes(route *routeapi.Route, routeGroup string, 
 		}
 
 		rsCfg := &ResourceConfig{}
-		rsCfg.Virtual.Partition = routeGroup
+		rsCfg.Virtual.Partition = strings.Join([]string{routeGroup, "Shared"}, "/")
 		rsCfg.MetaData.ResourceType = VirtualServer
 		rsCfg.Virtual.Enabled = true
 		rsCfg.Virtual.Name = rsName
