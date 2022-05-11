@@ -933,7 +933,7 @@ func (ctlr *Controller) processVirtualServers(
 		for _, vrt := range virtuals {
 			log.Debugf("Processing Virtual Server %s for port %v",
 				vrt.ObjectMeta.Name, portStruct.port)
-			rsCfg.MetaData.baseResources[vrt.Namespace + "/" + vrt.Name] = true
+			rsCfg.MetaData.baseResources[vrt.Namespace+"/"+vrt.Name] = true
 			err := ctlr.prepareRSConfigFromVirtualServer(
 				rsCfg,
 				vrt,
@@ -1158,6 +1158,11 @@ func (ctlr *Controller) getPolicyFromTransportServers(virtuals []*cisapiv1.Trans
 	if plcName == "" {
 		return nil, nil
 	}
+	return ctlr.getPolicy(ns, plcName)
+}
+
+// getPolicy fetches the policy CR
+func (ctlr *Controller) getPolicy(ns string, plcName string) (*cisapiv1.Policy, error) {
 	crInf, ok := ctlr.getNamespacedInformer(ns)
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", ns)
@@ -1680,7 +1685,7 @@ func (ctlr *Controller) processTransportServers(
 	for _, vrt := range virtuals {
 		log.Debugf("Processing Transport Server %s for port %v",
 			vrt.ObjectMeta.Name, vrt.Spec.VirtualServerPort)
-		rsCfg.MetaData.baseResources[vrt.Namespace + "/" + vrt.Name] = true
+		rsCfg.MetaData.baseResources[vrt.Namespace+"/"+vrt.Name] = true
 		err := ctlr.prepareRSConfigFromTransportServer(
 			rsCfg,
 			vrt,
@@ -1988,6 +1993,24 @@ func (ctlr *Controller) processLBServices(
 			ip,
 			portSpec.Port,
 		)
+		processingError := false
+		// Handle policy
+		plc, err := ctlr.getPolicyFromLBService(svc)
+		if plc != nil {
+			err := ctlr.handleTSResourceConfigForPolicy(rsCfg, plc)
+			if err != nil {
+				processingError = true
+			}
+		}
+		if err != nil {
+			processingError = true
+			log.Errorf("%v", err)
+		}
+
+		if processingError {
+			log.Errorf("Cannot Publish LB Service %s", svc.ObjectMeta.Name)
+			break
+		}
 
 		_ = ctlr.prepareRSConfigFromLBService(rsCfg, svc, portSpec)
 
@@ -2065,8 +2088,8 @@ func (ctlr *Controller) processService(
 
 func (ctlr *Controller) processExternalDNS(edns *cisapiv1.ExternalDNS, isDelete bool) {
 
-	if processedWIP,ok := ctlr.resources.dnsConfig[edns.Spec.DomainName]; ok{
-		if processedWIP.UID != string(edns.UID){
+	if processedWIP, ok := ctlr.resources.dnsConfig[edns.Spec.DomainName]; ok {
+		if processedWIP.UID != string(edns.UID) {
 			log.Errorf("EDNS with same domain name %s present", edns.Spec.DomainName)
 			return
 		}
@@ -2088,7 +2111,7 @@ func (ctlr *Controller) processExternalDNS(edns *cisapiv1.ExternalDNS, isDelete 
 		DomainName: edns.Spec.DomainName,
 		RecordType: edns.Spec.DNSRecordType,
 		LBMethod:   edns.Spec.LoadBalanceMethod,
-		UID :       string(edns.UID),
+		UID:        string(edns.UID),
 	}
 
 	if edns.Spec.DNSRecordType == "" {
@@ -2828,4 +2851,14 @@ func (ctlr *Controller) processPod(pod *v1.Pod, ispodDeleted bool) error {
 		delete(ctlr.resources.nplStore, podKey)
 	}
 	return nil
+}
+
+// getPolicyFromLBService gets the policy attached to the service and returns it
+func (ctlr *Controller) getPolicyFromLBService(svc *v1.Service) (*cisapiv1.Policy, error) {
+	plcName, found := svc.Annotations[LBServicePolicyNameAnnotation]
+	if !found || plcName == "" {
+		return nil, nil
+	}
+	ns := svc.Namespace
+	return ctlr.getPolicy(ns, plcName)
 }
