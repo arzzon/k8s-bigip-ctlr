@@ -1366,6 +1366,13 @@ func processCommonDecl(cfg *ResourceConfig, svc *as3Service) {
 		}
 	}
 
+	//Attach DOS policy
+	if cfg.Virtual.DOS != "" {
+		svc.ProfileDOS = &as3ResourcePointer{
+			BigIP: fmt.Sprintf("%v", cfg.Virtual.DOS),
+		}
+	}
+
 	//Attach logging profile
 	if cfg.Virtual.LogProfiles != nil {
 		for _, lp := range cfg.Virtual.LogProfiles {

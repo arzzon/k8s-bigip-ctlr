@@ -190,6 +190,7 @@ type (
 		AllowVLANs             []string              `json:"allowVlans,omitempty"`
 		PersistenceProfile     string                `json:"persistenceProfile,omitempty"`
 		TLSTermination         string                `json:"-"`
+		DOS                    string                `json:"dos,omitempty"`
 	}
 	// Virtuals is slice of virtuals
 	Virtuals []Virtual
@@ -762,6 +763,7 @@ type (
 		ProfileHTTP            as3MultiTypeParam    `json:"profileHTTP,omitempty"`
 		ProfileHTTP2           as3MultiTypeParam    `json:"profileHTTP2,omitempty"`
 		ProfileMultiplex       as3MultiTypeParam    `json:"profileMultiplex,omitempty"`
+		ProfileDOS             as3MultiTypeParam    `json:"profileDOS,omitempty"`
 	}
 
 	// as3ServiceAddress maps to VirtualAddress in AS3 Resources

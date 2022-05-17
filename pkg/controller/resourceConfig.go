@@ -1478,6 +1478,7 @@ func (ctlr *Controller) handleTSResourceConfigForPolicy(
 	rsCfg.Virtual.Firewall = plc.Spec.L3Policies.FirewallPolicy
 	rsCfg.Virtual.PersistenceProfile = plc.Spec.Profiles.PersistenceProfile
 	rsCfg.Virtual.ProfileL4 = plc.Spec.Profiles.ProfileL4
+	rsCfg.Virtual.DOS = plc.Spec.L3Policies.DOS
 
 	if len(plc.Spec.Profiles.LogProfiles) > 0 {
 		rsCfg.Virtual.LogProfiles = append(rsCfg.Virtual.LogProfiles, plc.Spec.Profiles.LogProfiles...)
