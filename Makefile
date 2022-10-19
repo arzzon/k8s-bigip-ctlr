@@ -14,10 +14,10 @@ GO_BUILD_FLAGS=-v -ldflags "-extldflags \"-static\" -X main.version=$(BUILD_VERS
 # Allow users to pass in BASE_OS build options (debian or rhel7)
 BASE_OS ?= debian
 
-# This is for builds not triggered through Travis CI 
+# This is for builds not triggered through Travis CI
 LICENSE_STRICT ?= false
 
-# If strict license approval check is desired, pass the corresponding flag 
+# If strict license approval check is desired, pass the corresponding flag
 # to Attributions Generator on command line
 ifeq ($(LICENSE_STRICT), true)
 	LIC_FLAG=--al release
@@ -93,7 +93,7 @@ dev-license: pre-build
 
 debug: pre-build
 	@echo "Building with debug support..."
-	docker build --build-arg RUN_TESTS=0 --build-arg BUILD_VERSION=$(BUILD_VERSION) --build-arg BUILD_INFO=$(BUILD_INFO) -t k8s-bigip-ctlr-dbg:latest -f build-tools/Dockerfile.debug .
+	docker build --build-arg RUN_TESTS=0 --build-arg BUILD_VERSION=$(BUILD_VERSION) --build-arg BUILD_INFO=$(BUILD_INFO) -t k8s-bigip-ctlr:latest -f build-tools/Dockerfile.debug .
 
 
 fmt:
@@ -141,15 +141,3 @@ endif
 
 docker-devel-tag:
 	docker push k8s-bigip-ctlr-devel:latest
-
-docker-dbg-tag:
-ifdef tag
-	docker tag k8s-bigip-ctlr-dbg:latest $(tag)
-	docker push $(tag)
-else
-	@echo "Define a tag to push. Eg: make docker-tag tag=username/k8s-bigip-ctlr:dev"
-endif
-
-crd-code-gen:
-	docker run --name crdcodegen -v $(PWD):/go/src/github.com/F5Networks/k8s-bigip-ctlr quay.io/f5networks/ciscrdcodegen:latest
-	docker rm crdcodegen

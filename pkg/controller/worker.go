@@ -22,6 +22,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -470,7 +471,8 @@ func (ctlr *Controller) processResources() bool {
 					nrInf.stop()
 					delete(ctlr.nrInformers, nsName)
 				}
-				if comInf, ok := ctlr.comInformers[nsName]; ok {
+				// TODO: Multicluster
+				if comInf, ok := ctlr.comInformers[ctlr.primaryCluster][nsName]; ok {
 					comInf.stop()
 					delete(ctlr.comInformers, nsName)
 				}
@@ -556,7 +558,7 @@ func (ctlr *Controller) processResources() bool {
 
 // getServiceForEndpoints returns the service associated with endpoints.
 func (ctlr *Controller) getServiceForEndpoints(ep *v1.Endpoints) *v1.Service {
-
+	cluster := getClusterNameFromK8SObj(ep.Annotations)
 	epName := ep.ObjectMeta.Name
 	epNamespace := ep.ObjectMeta.Namespace
 	svcKey := fmt.Sprintf("%s/%s", epNamespace, epName)
@@ -564,14 +566,14 @@ func (ctlr *Controller) getServiceForEndpoints(ep *v1.Endpoints) *v1.Service {
 	var svcInf cache.SharedIndexInformer
 	switch ctlr.mode {
 	case OpenShiftMode, KubernetesMode:
-		comInf, ok := ctlr.getNamespacedCommonInformer(ep.Namespace)
+		comInf, ok := ctlr.getNamespacedCommonInformer(ep.Namespace, cluster)
 		if !ok {
 			log.Errorf("Informer not found for namespace: %v", ep.Namespace)
 			return nil
 		}
 		svcInf = comInf.svcInformer
 	case CustomResourceMode:
-		crInf, ok := ctlr.getNamespacedCommonInformer(epNamespace)
+		crInf, ok := ctlr.getNamespacedCommonInformer(epNamespace, cluster)
 		if !ok {
 			log.Errorf("Informer not found for namespace: %v", epNamespace)
 			return nil
@@ -1328,7 +1330,7 @@ func (ctlr *Controller) getPolicyFromVirtuals(virtuals []*cisapiv1.VirtualServer
 	if plcName == "" {
 		return nil, nil
 	}
-	crInf, ok := ctlr.getNamespacedCommonInformer(ns)
+	crInf, ok := ctlr.getNamespacedCommonInformer(ns, "")
 	if !ok {
 		return nil, fmt.Errorf("Informer not found for namespace: %v", ns)
 	}
@@ -1364,7 +1366,7 @@ func (ctlr *Controller) getPolicyFromTransportServer(virtual *cisapiv1.Transport
 
 // getPolicy fetches the policy CR
 func (ctlr *Controller) getPolicy(ns string, plcName string) (*cisapiv1.Policy, error) {
-	crInf, ok := ctlr.getNamespacedCommonInformer(ns)
+	crInf, ok := ctlr.getNamespacedCommonInformer(ns, "")
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", ns)
 		return nil, fmt.Errorf("Informer not found for namespace: %v", ns)
@@ -1676,7 +1678,8 @@ func (ctlr *Controller) updatePoolMembersForNodePort(
 	namespace string,
 ) {
 	_, ok1 := ctlr.getNamespacedCRInformer(namespace)
-	_, ok2 := ctlr.getNamespacedCommonInformer(namespace)
+	// TODO: Multicluster handle it
+	_, ok2 := ctlr.getNamespacedCommonInformer(namespace, "")
 	if !ok1 && !ok2 {
 		log.Errorf("Informer not found for namespace: %v", namespace)
 		return
@@ -1684,7 +1687,11 @@ func (ctlr *Controller) updatePoolMembersForNodePort(
 
 	for index, pool := range rsCfg.Pools {
 		svcName := pool.ServiceName
-		svcKey := pool.ServiceNamespace + "/" + svcName
+		clusterPrefix := ""
+		if pool.Cluster != "" {
+			clusterPrefix = pool.Cluster + "_"
+		}
+		svcKey := clusterPrefix + pool.ServiceNamespace + "/" + svcName
 
 		poolMemInfo, ok := ctlr.resources.poolMemCache[svcKey]
 		if (!ok || len(poolMemInfo.memberMap) == 0) && pool.ServiceNamespace == namespace {
@@ -1720,7 +1727,11 @@ func (ctlr *Controller) updatePoolMembersForCluster(
 ) {
 	for index, pool := range rsCfg.Pools {
 		svcName := pool.ServiceName
-		svcKey := pool.ServiceNamespace + "/" + svcName
+		clusterPrefix := ""
+		if pool.Cluster != "" {
+			clusterPrefix = pool.Cluster + "_"
+		}
+		svcKey := clusterPrefix + pool.ServiceNamespace + "/" + svcName
 
 		poolMemInfo, ok := ctlr.resources.poolMemCache[svcKey]
 
@@ -2047,7 +2058,7 @@ func (ctlr *Controller) getAllTransportServers(namespace string) []*cisapiv1.Tra
 func (ctlr *Controller) getAllLBServices(namespace string) []*v1.Service {
 	var allLBServices []*v1.Service
 
-	comInf, ok := ctlr.getNamespacedCommonInformer(namespace)
+	comInf, ok := ctlr.getNamespacedCommonInformer(namespace, "")
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", namespace)
 		return nil
@@ -2126,7 +2137,7 @@ func filterTransportServersForService(allVirtuals []*cisapiv1.TransportServer,
 func (ctlr *Controller) getAllServicesFromMonitoredNamespaces() []*v1.Service {
 	var svcList []*v1.Service
 	if ctlr.watchingAllNamespaces() {
-		objList := ctlr.comInformers[""].svcInformer.GetIndexer().List()
+		objList := ctlr.comInformers[ctlr.primaryCluster][""].svcInformer.GetIndexer().List()
 		for _, obj := range objList {
 			svcList = append(svcList, obj.(*v1.Service))
 		}
@@ -2134,7 +2145,7 @@ func (ctlr *Controller) getAllServicesFromMonitoredNamespaces() []*v1.Service {
 	}
 
 	for ns := range ctlr.namespaces {
-		objList := ctlr.comInformers[ns].svcInformer.GetIndexer().List()
+		objList := ctlr.comInformers[ctlr.primaryCluster][ns].svcInformer.GetIndexer().List()
 		for _, obj := range objList {
 			svcList = append(svcList, obj.(*v1.Service))
 		}
@@ -2342,16 +2353,21 @@ func (ctlr *Controller) processService(
 	svc *v1.Service,
 	eps *v1.Endpoints,
 	isSVCDeleted bool,
-) error {
+) error { //TODO: Multicluster create svcKey with cluster prefix for deletion
+	cluster := getClusterNameFromK8SObj(svc.Annotations)
 	namespace := svc.Namespace
+	clusterPrefix := ""
+	if cluster != "" {
+		clusterPrefix = cluster + "/"
+	}
 	svcKey := svc.Namespace + "/" + svc.Name
 	if isSVCDeleted {
-		delete(ctlr.resources.poolMemCache, svcKey)
+		delete(ctlr.resources.poolMemCache, clusterPrefix+svcKey)
 		return nil
 	}
 
 	if eps == nil {
-		comInf, ok := ctlr.getNamespacedCommonInformer(namespace)
+		comInf, ok := ctlr.getNamespacedCommonInformer(namespace, cluster)
 		if !ok {
 			log.Errorf("Informer not found for namespace: %v", namespace)
 			return fmt.Errorf("unable to process Service: %v", svcKey)
@@ -2390,7 +2406,7 @@ func (ctlr *Controller) processService(
 		}
 	}
 
-	ctlr.resources.poolMemCache[svcKey] = pmi
+	ctlr.resources.poolMemCache[clusterPrefix+svcKey] = pmi
 
 	return nil
 }
@@ -2545,7 +2561,7 @@ func (ctlr *Controller) processExternalDNS(edns *cisapiv1.ExternalDNS, isDelete 
 
 func (ctlr *Controller) getAllExternalDNS(namespace string) []*cisapiv1.ExternalDNS {
 	var allEDNS []*cisapiv1.ExternalDNS
-	comInf, ok := ctlr.getNamespacedCommonInformer(namespace)
+	comInf, ok := ctlr.getNamespacedCommonInformer(namespace, "")
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", namespace)
 		return nil
@@ -2648,7 +2664,7 @@ func (ctlr *Controller) processIPAM(ipam *ficV1.IPAM) error {
 			ns = splits[0]
 			var ok bool
 			crInf, ok = ctlr.getNamespacedCRInformer(ns)
-			comInf, ok = ctlr.getNamespacedCommonInformer(ns)
+			comInf, ok = ctlr.getNamespacedCommonInformer(ns, "")
 			if !ok {
 				log.Errorf("Informer not found for namespace: %v", ns)
 				return nil
@@ -3254,9 +3270,9 @@ func (ctlr *Controller) updateIngressLinkStatus(il *cisapiv1.IngressLink, ip str
 }
 
 //returns service obj with servicename
-func (ctlr *Controller) GetService(namespace, serviceName string) *v1.Service {
+func (ctlr *Controller) GetService(namespace, serviceName string, cluster string) *v1.Service {
 	svcKey := namespace + "/" + serviceName
-	comInf, ok := ctlr.getNamespacedCommonInformer(namespace)
+	comInf, ok := ctlr.getNamespacedCommonInformer(namespace, cluster)
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", namespace)
 		return nil
@@ -3276,7 +3292,7 @@ func (ctlr *Controller) GetService(namespace, serviceName string) *v1.Service {
 //returns podlist with labels set to svc selector
 func (ctlr *Controller) GetPodsForService(namespace, serviceName string) *v1.PodList {
 	svcKey := namespace + "/" + serviceName
-	comInf, ok := ctlr.getNamespacedCommonInformer(namespace)
+	comInf, ok := ctlr.getNamespacedCommonInformer(namespace, "")
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", namespace)
 		return nil
@@ -3318,7 +3334,7 @@ func (ctlr *Controller) GetPodsForService(namespace, serviceName string) *v1.Pod
 }
 
 func (ctlr *Controller) GetServicesForPod(pod *v1.Pod) *v1.Service {
-	comInf, ok := ctlr.getNamespacedCommonInformer(pod.Namespace)
+	comInf, ok := ctlr.getNamespacedCommonInformer(pod.Namespace, "")
 	if !ok {
 		log.Errorf("Informer not found for namespace: %v", pod.Namespace)
 		return nil
@@ -3481,4 +3497,22 @@ func (ctlr *Controller) getTLSProfilesForSecret(secret *v1.Secret) []*cisapiv1.T
 		}
 	}
 	return allTLSProfiles
+}
+
+func getClusterNameFromK8SObj(annot map[string]string) string {
+	if annot == nil {
+		return ""
+	}
+	if _, ok := annot["kubectl.kubernetes.io/last-applied-configuration"]; !ok {
+		return ""
+	}
+	str := annot["kubectl.kubernetes.io/last-applied-configuration"]
+	keystr := "\"" + "clusterName" + "\":[^,;\\]}]*"
+	r, _ := regexp.Compile(keystr)
+	match := r.FindString(str)
+	keyValMatch := strings.Split(match, ":")
+	if keyValMatch == nil || len(keyValMatch) <= 1 {
+		return ""
+	}
+	return strings.ReplaceAll(keyValMatch[1], "\"", "")
 }

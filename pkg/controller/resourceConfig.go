@@ -338,7 +338,11 @@ func (ctlr *Controller) getSvcDepResources(svcDepRscKey string) map[string]struc
 
 func (ctlr *Controller) updateSvcDepResources(rsName string, rsCfg *ResourceConfig) {
 	for _, pool := range rsCfg.Pools {
-		svcDepRscKey := pool.ServiceNamespace + "_" + pool.ServiceName
+		clusterPrefix := ""
+		if pool.Cluster != "" {
+			clusterPrefix = pool.Cluster + "_"
+		}
+		svcDepRscKey := clusterPrefix + "_" + pool.ServiceNamespace + "_" + pool.ServiceName
 		if resources, found := ctlr.resources.svcResourceCache[svcDepRscKey]; found {
 			if _, found := resources[rsName]; !found {
 				ctlr.resources.svcResourceCache[svcDepRscKey][rsName] = struct{}{}
@@ -372,9 +376,9 @@ func (ctlr *Controller) fetchTargetPort(namespace, svcName string, servicePort i
 	var svcIndexer cache.Indexer
 	svcKey := namespace + "/" + svcName
 	if ctlr.watchingAllNamespaces() {
-		svcIndexer = ctlr.comInformers[""].svcInformer.GetIndexer()
+		svcIndexer = ctlr.comInformers[ctlr.primaryCluster][""].svcInformer.GetIndexer()
 	} else {
-		if informer, ok := ctlr.comInformers[namespace]; ok {
+		if informer, ok := ctlr.comInformers[ctlr.primaryCluster][namespace]; ok {
 			svcIndexer = informer.svcInformer.GetIndexer()
 		} else {
 			return targetPort
@@ -446,6 +450,7 @@ func (ctlr *Controller) prepareRSConfigFromVirtualServer(
 			Balance:           pl.Balance,
 			ReselectTries:     pl.ReselectTries,
 			ServiceDownAction: pl.ServiceDownAction,
+			Cluster:           pl.Cluster,
 		}
 		if pl.Monitor.Name != "" && pl.Monitor.Reference == "bigip" {
 			pool.MonitorNames = append(pool.MonitorNames, MonitorName{Name: pl.Monitor.Name, Reference: pl.Monitor.Reference})
@@ -629,7 +634,7 @@ func (ctlr *Controller) handleTLS(
 					if _, ok := ctlr.comInformers[namespace]; !ok {
 						return false
 					}
-					obj, found, err := ctlr.comInformers[namespace].secretsInformer.GetIndexer().GetByKey(secretKey)
+					obj, found, err := ctlr.comInformers[ctlr.primaryCluster][namespace].secretsInformer.GetIndexer().GetByKey(secretKey)
 					if err != nil || !found {
 						log.Errorf("secret %s not found for '%s' '%s'/'%s'",
 							clientSSL, tlsContext.resourceType, tlsContext.namespace, tlsContext.name)
@@ -649,7 +654,7 @@ func (ctlr *Controller) handleTLS(
 					if _, ok := ctlr.comInformers[namespace]; !ok {
 						return false
 					}
-					obj, found, err := ctlr.comInformers[namespace].secretsInformer.GetIndexer().GetByKey(secretKey)
+					obj, found, err := ctlr.comInformers[ctlr.primaryCluster][namespace].secretsInformer.GetIndexer().GetByKey(secretKey)
 					if err != nil || !found {
 						log.Errorf("secret %s not found for '%s' '%s'/'%s'",
 							serverSSL, tlsContext.resourceType, tlsContext.namespace, tlsContext.name)

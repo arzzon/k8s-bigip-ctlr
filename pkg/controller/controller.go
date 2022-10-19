@@ -124,13 +124,18 @@ func NewController(params Params) *Controller {
 		defaultRouteDomain: params.DefaultRouteDomain,
 		mode:               params.Mode,
 		namespaceLabel:     params.NamespaceLabel,
+		clusters:           params.Clusters,
+		primaryCluster:     params.PrimaryCluster,
 	}
 
 	log.Debug("Controller Created")
 
 	ctlr.resourceQueue = workqueue.NewNamedRateLimitingQueue(
 		workqueue.DefaultControllerRateLimiter(), "nextgen-resource-controller")
-	ctlr.comInformers = make(map[string]*CommonInformer)
+	ctlr.comInformers = make(map[string]map[string]*CommonInformer)
+	for _, cluster := range ctlr.clusters {
+		ctlr.comInformers[cluster] = make(map[string]*CommonInformer)
+	}
 	ctlr.nrInformers = make(map[string]*NRInformer)
 	ctlr.crInformers = make(map[string]*CRInformer)
 	ctlr.nsInformers = make(map[string]*NSInformer)
@@ -152,7 +157,7 @@ func NewController(params Params) *Controller {
 		ctlr.shareNodes = true
 	}
 
-	if err := ctlr.setupClients(params.Config); err != nil {
+	if err := ctlr.setupClients(params.Configs); err != nil {
 		log.Errorf("Failed to Setup Clients: %v", err)
 	}
 
@@ -311,15 +316,20 @@ func createLabelSelector(label string) (labels.Selector, error) {
 }
 
 // setupClients sets Kubernetes Clients.
-func (ctlr *Controller) setupClients(config *rest.Config) error {
+func (ctlr *Controller) setupClients(config []*rest.Config) error {
+	// TODO: Multicluster only handles 2 clusters
 	var kubeCRClient *versioned.Clientset
 	var err error
-	kubeCRClient, err = versioned.NewForConfig(config)
+	kubeCRClient, err = versioned.NewForConfig(config[0])
 	if err != nil {
 		return fmt.Errorf("Failed to create Custum Resource kubeClient: %v", err)
 	}
 
-	kubeClient, err := kubernetes.NewForConfig(config)
+	kubeClient, err := kubernetes.NewForConfig(config[0])
+	if err != nil {
+		return fmt.Errorf("Failed to create kubeClient: %v", err)
+	}
+	kubeClient2, err := kubernetes.NewForConfig(config[1])
 	if err != nil {
 		return fmt.Errorf("Failed to create kubeClient: %v", err)
 	}
@@ -335,7 +345,7 @@ func (ctlr *Controller) setupClients(config *rest.Config) error {
 
 	var rclient *routeclient.RouteV1Client
 	if ctlr.mode == OpenShiftMode {
-		rclient, err = routeclient.NewForConfig(config)
+		rclient, err = routeclient.NewForConfig(config[0])
 		if nil != err {
 			return fmt.Errorf("Failed to create Route Client: %v", err)
 		}
@@ -345,6 +355,7 @@ func (ctlr *Controller) setupClients(config *rest.Config) error {
 	ctlr.kubeAPIClient = kubeIPAMClient
 	ctlr.kubeCRClient = kubeCRClient
 	ctlr.kubeClient = kubeClient
+	ctlr.kubeClient2 = kubeClient2
 	ctlr.routeClientV1 = rclient
 	return nil
 }
@@ -370,9 +381,16 @@ func (ctlr *Controller) Start() {
 		nsInf.start()
 	}
 
+	// TODO: Multicluster start external cluster svc and ep informers
 	// start comInformers for all modes
-	for _, inf := range ctlr.comInformers {
-		inf.start()
+	for cluster, clusterComInformer := range ctlr.comInformers {
+		for _, inf := range clusterComInformer {
+			if cluster != ctlr.primaryCluster {
+				inf.start()
+			} else {
+				inf.startSvcEndInformers()
+			}
+		}
 	}
 	switch ctlr.mode {
 	case OpenShiftMode, KubernetesMode:
@@ -417,8 +435,11 @@ func (ctlr *Controller) Stop() {
 	}
 
 	// stop common informers & namespace informers in all modes
-	for _, inf := range ctlr.comInformers {
-		inf.stop()
+	for _, clusterComInf := range ctlr.comInformers {
+		// TODO: Multicluster
+		for _, inf := range clusterComInf {
+			inf.stop()
+		}
 	}
 	for _, nsInf := range ctlr.nsInformers {
 		nsInf.stop()

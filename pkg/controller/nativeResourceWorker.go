@@ -180,7 +180,7 @@ func (ctlr *Controller) handleRouteGroupExtendedSpec(rsCfg *ResourceConfig, extd
 	if policy != "" {
 		splits := strings.Split(policy, "/")
 		policyNamespace := splits[0]
-		comInf, ok := ctlr.getNamespacedCommonInformer(policyNamespace)
+		comInf, ok := ctlr.getNamespacedCommonInformer(policyNamespace, "")
 		if !ok {
 			return fmt.Errorf("Informer not found for namespace: %v", policyNamespace)
 		}
@@ -211,7 +211,7 @@ func (ctlr *Controller) getServicePort(
 	log.Debugf("Finding port for route %v", route.Name)
 	var err error
 	var port int32
-	nrInf, ok := ctlr.getNamespacedCommonInformer(route.Namespace)
+	nrInf, ok := ctlr.getNamespacedCommonInformer(route.Namespace, "")
 	if !ok {
 		return fmt.Errorf("Informer not found for namespace: %v", route.Namespace), port
 	}

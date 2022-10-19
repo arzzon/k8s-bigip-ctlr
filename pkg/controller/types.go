@@ -51,6 +51,7 @@ type (
 		resources              *ResourceStore
 		kubeCRClient           versioned.Interface
 		kubeClient             kubernetes.Interface
+		kubeClient2            kubernetes.Interface
 		kubeAPIClient          *extClient.Clientset
 		eventNotifier          *apm.EventNotifier
 		nativeResourceSelector labels.Selector
@@ -75,12 +76,14 @@ type (
 		requestQueue           *requestQueue
 		namespaceLabel         string
 		ipamHostSpecEmpty      bool
+		primaryCluster         string
+		clusters               []string
 		resourceContext
 	}
 	resourceContext struct {
 		resourceQueue      workqueue.RateLimitingInterface
 		routeClientV1      routeclient.RouteV1Interface
-		comInformers       map[string]*CommonInformer
+		comInformers       map[string]map[string]*CommonInformer
 		nrInformers        map[string]*NRInformer
 		crInformers        map[string]*CRInformer
 		nsInformers        map[string]*NSInformer
@@ -93,6 +96,7 @@ type (
 	// Params defines parameters
 	Params struct {
 		Config             *rest.Config
+		Configs            []*rest.Config
 		Namespaces         []string
 		NamespaceLabel     string
 		Partition          string
@@ -109,6 +113,8 @@ type (
 		Mode               ControllerMode
 		RouteSpecConfigmap string
 		RouteLabel         string
+		Clusters           []string
+		PrimaryCluster     string
 	}
 
 	// CRInformer defines the structure of Custom Resource Informer
@@ -348,6 +354,7 @@ type (
 		MonitorNames      []MonitorName      `json:"monitors,omitempty"`
 		ReselectTries     int32              `json:"reselectTries,omitempty"`
 		ServiceDownAction string             `json:"serviceDownAction,omitempty"`
+		Cluster           string             `json:"cluster,omitempty"`
 	}
 	// Pools is slice of pool
 	Pools []Pool

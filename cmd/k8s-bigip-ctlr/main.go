@@ -794,7 +794,7 @@ func setupWatchers(appMgr *appmanager.Manager, resyncPeriod time.Duration) {
 }
 
 func initController(
-	config *rest.Config,
+	config *rest.Config, configs []*rest.Config,
 ) *controller.Controller {
 
 	postMgrParams := controller.PostParams{
@@ -834,9 +834,11 @@ func initController(
 
 	agent := controller.NewAgent(agentParams)
 
+	clusters := []string{"cluster1", "cluster2"}
 	ctlr := controller.NewController(
 		controller.Params{
 			Config:             config,
+			Configs:            configs,
 			Namespaces:         *namespaces,
 			NamespaceLabel:     *namespaceLabel,
 			Partition:          (*bigIPPartitions)[0],
@@ -853,6 +855,8 @@ func initController(
 			Mode:               controller.ControllerMode(*controllerMode),
 			RouteSpecConfigmap: *routeSpecConfigmap,
 			RouteLabel:         *routeLabel,
+			Clusters:           clusters,
+			PrimaryCluster:     "cluster1",
 		},
 	)
 
@@ -937,12 +941,26 @@ func main() {
 		}
 	}
 
-	config, err := getKubeConfig()
+	// TODO: Multicluster Logic to get the kubeconfig for different clusters
+	var configs []*rest.Config
+	//configs = make([]*rest.Config, 2)
+	//config, err := getKubeConfig()
+	config, err := getKubeConfigs("/app/config/config1")
 	if err != nil {
 		os.Exit(1)
 	}
+	configs = append(configs, config)
+	config, err = getKubeConfigs("/app/config/config2")
+	if err != nil {
+		os.Exit(1)
+	}
+	configs = append(configs, config)
 
-	kubeClient, err = kubernetes.NewForConfig(config)
+	//if err != nil {
+	//	os.Exit(1)
+	//}
+
+	kubeClient, err = kubernetes.NewForConfig(configs[0])
 	if err != nil {
 		log.Fatalf("[INIT] error connecting to the client: %v", err)
 		os.Exit(1)
@@ -994,7 +1012,7 @@ func main() {
 
 	if *customResourceMode || *controllerMode != "" {
 		getGTMCredentials()
-		ctlr := initController(config)
+		ctlr := initController(config, configs)
 		ctlr.TeemData = td
 		if !(*disableTeems) {
 			key, err := ctlr.Agent.GetBigipRegKey()
@@ -1254,6 +1272,24 @@ func getKubeConfig() (*rest.Config, error) {
 	} else {
 		config, err = clientcmd.BuildConfigFromFlags("", *kubeConfig)
 	}
+	if err != nil {
+		log.Fatalf("[INIT] error creating configuration: %v", err)
+		return nil, err
+	}
+
+	// creates the clientset
+	return config, nil
+}
+
+func getKubeConfigs(configPath string) (*rest.Config, error) {
+	var config *rest.Config
+	var err error
+	//if *inCluster {
+	//	config, err = rest.InClusterConfig()
+	//} else {
+	//	config, err = clientcmd.BuildConfigFromFlags("", *kubeConfig)
+	//}
+	config, err = clientcmd.BuildConfigFromFlags("", configPath)
 	if err != nil {
 		log.Fatalf("[INIT] error creating configuration: %v", err)
 		return nil, err

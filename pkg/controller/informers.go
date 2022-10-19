@@ -19,12 +19,13 @@ package controller
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"time"
-
 	routeapi "github.com/openshift/api/route/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
+	"reflect"
+	rt "runtime"
+	"time"
 
 	ficV1 "github.com/F5Networks/f5-ipam-controller/pkg/ipamapis/apis/fic/v1"
 	cisapiv1 "github.com/F5Networks/k8s-bigip-ctlr/config/apis/cis/v1"
@@ -111,6 +112,18 @@ func (nrInfr *NRInformer) stop() {
 	close(nrInfr.stopCh)
 }
 
+func (comInfr *CommonInformer) startSvcEndInformers() {
+	var cacheSyncs []cache.InformerSynced
+	if comInfr.svcInformer != nil {
+		go comInfr.svcInformer.Run(comInfr.stopCh)
+		cacheSyncs = append(cacheSyncs, comInfr.svcInformer.HasSynced)
+	}
+	if comInfr.epsInformer != nil {
+		go comInfr.epsInformer.Run(comInfr.stopCh)
+		cacheSyncs = append(cacheSyncs, comInfr.epsInformer.HasSynced)
+	}
+}
+
 func (comInfr *CommonInformer) start() {
 	var cacheSyncs []cache.InformerSynced
 	if comInfr.svcInformer != nil {
@@ -152,10 +165,11 @@ func (comInfr *CommonInformer) stop() {
 func (ctlr *Controller) watchingAllNamespaces() bool {
 	switch ctlr.mode {
 	case OpenShiftMode, KubernetesMode:
-		if len(ctlr.comInformers) == 0 || len(ctlr.nrInformers) == 0 {
+		// TODO: Multicluster
+		if len(ctlr.comInformers) == 0 || len(ctlr.comInformers[ctlr.primaryCluster]) == 0 || len(ctlr.nrInformers) == 0 {
 			return false
 		}
-		_, watchingAll := ctlr.comInformers[""]
+		_, watchingAll := ctlr.comInformers[ctlr.primaryCluster][""]
 		return watchingAll
 	case CustomResourceMode:
 		if len(ctlr.crInformers) == 0 {
@@ -179,12 +193,26 @@ func (ctlr *Controller) getNamespacedCRInformer(
 }
 
 func (ctlr *Controller) getNamespacedCommonInformer(
+	namespace string, cluster string,
+) (*CommonInformer, bool) {
+	if ctlr.watchingAllNamespaces() {
+		namespace = ""
+	}
+	if cluster == "" {
+		cluster = ctlr.primaryCluster
+	}
+	comInf, found := ctlr.comInformers[cluster][namespace]
+	return comInf, found
+}
+
+func (ctlr *Controller) getNamespacedSvsEpCommonInformer(
 	namespace string,
 ) (*CommonInformer, bool) {
 	if ctlr.watchingAllNamespaces() {
 		namespace = ""
 	}
-	comInf, found := ctlr.comInformers[namespace]
+	// TODO: Multicluster
+	comInf, found := ctlr.comInformers[ctlr.primaryCluster][namespace]
 	return comInf, found
 }
 
@@ -231,12 +259,29 @@ func (ctlr *Controller) addNamespacedInformers(
 	}
 
 	// add common informers  in all modes
-	if _, found := ctlr.comInformers[namespace]; !found {
-		comInf := ctlr.newNamespacedCommonResourceInformer(namespace)
+	if _, found := ctlr.comInformers[ctlr.primaryCluster][namespace]; !found {
+		// TODO: Multicluster kubeclient should be removed some map should be maintained
+		comInf := ctlr.newNamespacedCommonResourceInformer(namespace, ctlr.kubeClient)
 		ctlr.addCommonResourceEventHandlers(comInf)
-		ctlr.comInformers[namespace] = comInf
+		ctlr.comInformers[ctlr.primaryCluster][namespace] = comInf
 		if startInformer {
 			comInf.start()
+		}
+	}
+
+	// TODO: Multicluster handle external cluster svc and ep informer
+	for cluster, comInformers := range ctlr.comInformers {
+		if cluster == ctlr.primaryCluster {
+			continue
+		}
+		if _, found := comInformers[namespace]; !found {
+			// TODO: Multicluster kubeclient should be removed some map should be maintained
+			comInf := ctlr.newNamespacedCommonResourceInformer(namespace, ctlr.kubeClient2)
+			ctlr.addCommonResourceEventHandlers(comInf)
+			ctlr.comInformers[cluster][namespace] = comInf
+			if startInformer {
+				comInf.startSvcEndInformers()
+			}
 		}
 	}
 
@@ -371,14 +416,15 @@ func (ctlr *Controller) newNamespacedNativeResourceInformer(
 }
 
 func (ctlr *Controller) newNamespacedCommonResourceInformer(
-	namespace string,
+	namespace string, kubeClient kubernetes.Interface,
 ) *CommonInformer {
 	log.Debugf("Creating Common Resource Informers for Namespace: %v", namespace)
 	everything := func(options *metav1.ListOptions) {
 		options.LabelSelector = ""
 	}
 	resyncPeriod := 0 * time.Second
-	restClientv1 := ctlr.kubeClient.CoreV1().RESTClient()
+	// TODO: Multicluster
+	restClientv1 := kubeClient.CoreV1().RESTClient()
 	crOptions := func(options *metav1.ListOptions) {
 		options.LabelSelector = ctlr.customResourceSelector.String()
 	}
@@ -949,6 +995,11 @@ func (ctlr *Controller) enqueueDeletedExternalDNS(obj interface{}) {
 }
 
 func (ctlr *Controller) enqueueService(obj interface{}) {
+	pc, _, _, ok := rt.Caller(1)
+	details := rt.FuncForPC(pc)
+	if ok && details != nil {
+		log.Debugf("called from %s\n", details.Name())
+	}
 	svc := obj.(*corev1.Service)
 	// Ignore K8S Core Services
 	if _, ok := K8SCoreServices[svc.Name]; ok {
