@@ -354,7 +354,7 @@ type (
 		MonitorNames      []MonitorName      `json:"monitors,omitempty"`
 		ReselectTries     int32              `json:"reselectTries,omitempty"`
 		ServiceDownAction string             `json:"serviceDownAction,omitempty"`
-		Cluster           string             `json:"cluster,omitempty"`
+		Cluster           string             `json:"Cluster,omitempty"`
 	}
 	// Pools is slice of pool
 	Pools []Pool

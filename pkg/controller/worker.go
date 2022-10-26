@@ -1729,7 +1729,7 @@ func (ctlr *Controller) updatePoolMembersForCluster(
 		svcName := pool.ServiceName
 		clusterPrefix := ""
 		if pool.Cluster != "" {
-			clusterPrefix = pool.Cluster + "_"
+			clusterPrefix = pool.Cluster + "/"
 		}
 		svcKey := clusterPrefix + pool.ServiceNamespace + "/" + svcName
 
@@ -2392,7 +2392,9 @@ func (ctlr *Controller) processService(
 			var members []PoolMember
 			for _, addr := range subset.Addresses {
 				// Checking for headless services
-				if svc.Spec.ClusterIP == "None" || (addr.NodeName != nil && containsNode(nodes, *addr.NodeName)) {
+				// TODO: Multicluster handle nodes update
+				//if svc.Spec.ClusterIP == "None" || (addr.NodeName != nil && containsNode(nodes, *addr.NodeName)) {
+				if svc.Spec.ClusterIP == "None" || (addr.NodeName != nil || containsNode(nodes, *addr.NodeName)) {
 					member := PoolMember{
 						Address: addr.IP,
 						Port:    p.Port,
