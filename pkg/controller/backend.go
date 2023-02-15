@@ -253,7 +253,9 @@ func (agent *Agent) agentWorker() {
 		for tenant := range agent.incomingTenantDeclMap {
 			if _, ok := agent.tenantPriorityMap[tenant]; ok {
 				priorityTenants = append(priorityTenants, tenant)
-			} else {
+			} else if _, ok := agent.retryTenantDeclMap[tenant]; !ok {
+				// Failed tenant declarations are not added to updatedTenants to ensure that failed tenants don't affect
+				// posting of other tenant declarations
 				updatedTenants = append(updatedTenants, tenant)
 			}
 			agent.tenantResponseMap[tenant] = tenantResponse{}
