@@ -28,7 +28,9 @@ import (
 	"github.com/F5Networks/f5-ipam-controller/pkg/ipammachinery"
 	"github.com/F5Networks/k8s-bigip-ctlr/v2/config/client/clientset/versioned"
 	apm "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/appmanager"
+	"github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/clustermanager"
 	log "github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/vlogger"
+
 	routeclient "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
 	v1 "k8s.io/api/core/v1"
 	extClient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -111,24 +113,24 @@ const (
 
 // NewController creates a new Controller Instance.
 func NewController(params Params) *Controller {
-
 	ctlr := &Controller{
-		namespaces:         make(map[string]bool),
-		resources:          NewResourceStore(),
-		Agent:              params.Agent,
-		PoolMemberType:     params.PoolMemberType,
-		UseNodeInternal:    params.UseNodeInternal,
-		Partition:          params.Partition,
-		initState:          true,
-		dgPath:             strings.Join([]string{DEFAULT_PARTITION, "Shared"}, "/"),
-		shareNodes:         params.ShareNodes,
-		eventNotifier:      apm.NewEventNotifier(nil),
-		defaultRouteDomain: params.DefaultRouteDomain,
-		mode:               params.Mode,
-		namespaceLabel:     params.NamespaceLabel,
-		nodeLabelSelector:  params.NodeLabelSelector,
-		vxlanName:          params.VXLANName,
-		vxlanMode:          params.VXLANMode,
+		namespaces:          make(map[string]bool),
+		resources:           NewResourceStore(),
+		Agent:               params.Agent,
+		PoolMemberType:      params.PoolMemberType,
+		UseNodeInternal:     params.UseNodeInternal,
+		Partition:           params.Partition,
+		initState:           true,
+		dgPath:              strings.Join([]string{DEFAULT_PARTITION, "Shared"}, "/"),
+		shareNodes:          params.ShareNodes,
+		eventNotifier:       apm.NewEventNotifier(nil),
+		defaultRouteDomain:  params.DefaultRouteDomain,
+		mode:                params.Mode,
+		namespaceLabel:      params.NamespaceLabel,
+		nodeLabelSelector:   params.NodeLabelSelector,
+		vxlanName:           params.VXLANName,
+		vxlanMode:           params.VXLANMode,
+		multiClusterConfigs: clustermanager.NewMultiClusterConfig(),
 	}
 
 	log.Debug("Controller Created")

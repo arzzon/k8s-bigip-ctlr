@@ -18,6 +18,7 @@ package controller
 
 import (
 	"container/list"
+	"github.com/F5Networks/k8s-bigip-ctlr/v2/pkg/clustermanager"
 	"net/http"
 	"sync"
 
@@ -79,6 +80,7 @@ type (
 		requestQueue           *requestQueue
 		namespaceLabel         string
 		ipamHostSpecEmpty      bool
+		multiClusterConfigs    *clustermanager.MultiClusterConfig
 		resourceContext
 	}
 	resourceContext struct {
@@ -406,6 +408,8 @@ type (
 		// key of the map is IPSpec.Key
 		ipamContext              map[string]ficV1.IPSpec
 		processedNativeResources map[resourceRef]struct{}
+		// stores valid multiClusterConfigs from extendendCM
+		multiClusterConfigs map[string]MultiClusterConfig
 	}
 
 	svcResourceCacheMeta struct {
@@ -1099,6 +1103,7 @@ type (
 	extendedSpec struct {
 		ExtendedRouteGroupConfigs []ExtendedRouteGroupConfig `yaml:"extendedRouteSpec"`
 		BaseRouteConfig           `yaml:"baseRouteSpec"`
+		MultiClusterConfigs       []MultiClusterConfig `yaml:"multiClusterConfigs"`
 	}
 
 	ExtendedRouteGroupConfig struct {
@@ -1144,6 +1149,12 @@ type (
 	AnnotationsUsed struct {
 		WAF              bool
 		AllowSourceRange bool
+	}
+	MultiClusterConfig struct {
+		ClusterName string `yaml:"clusterName"`
+		Secret      string `yaml:"secret"`
+		// HACIS determines whether cluster config belongs to primary/secondary/external cluster
+		HACIS string `yaml:"hACIS"`
 	}
 )
 
