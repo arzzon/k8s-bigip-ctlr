@@ -92,4 +92,3 @@ cd k8s-bigip-ctlr
 make all test
 ```
 
-To make changes to vendor dependencies, see [Devel](DEVEL.md)
