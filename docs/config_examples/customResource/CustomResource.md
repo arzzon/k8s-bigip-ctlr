@@ -161,7 +161,7 @@ Note: **monitors** take priority over **monitor** if both are provided in VS spe
 
 ### Examples
 
-   https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/VirtualServer
+   https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/VirtualServer
    
 ## TLSProfile
    * TLSProfile is used to specify the TLS termination for a single/list of services in a VirtualServer Custom Resource. TLS termination relies on SNI. Any non-SNI traffic received on port 443 may result in connection issues. 
@@ -207,7 +207,7 @@ different terminations(for same domain), one with edge and another with re-encry
 
 ### Examples
 
-   https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/VirtualServerWithTLSProfile
+   https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/VirtualServerWithTLSProfile
 
 ## TransportServer
    * TransportServer resource expose non-HTTP traffic configuration for a virtual server address in BIG-IP.
@@ -294,7 +294,7 @@ Note: **monitors** take priority over **monitor** if both are provided in TS spe
 
 ### Examples
 
-   https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/TransportServer
+   https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/TransportServer
 
 ## ExternalDNS
    * ExternalDNS CRD's allows you to control DNS records dynamically via Kubernetes/OSCP resources in a DNS provider-agnostic way.
@@ -342,7 +342,7 @@ Note: **monitors** take priority over **monitor** if both are provided in TS spe
 | interval | Int | Required | 5 | Seconds between health queries |
 | timeout | Int | Optional | 16 | Seconds before query fails |
 
-Refer https://github.com/F5Networks/k8s-bigip-ctlr/blob/master/docs/config_examples/customResource/ExternalDNS/README.md 
+Refer https://github.com/F5Networks/k8s-bigip-ctlr/blob/2.x-master/docs/config_examples/customResource/ExternalDNS/README.md 
 
 **Note**: 
 * To set up external DNS using BIG-IP GTM user needs to first manually configure GSLB → Datacenter and GSLB → Server on BIG-IP common partition.
@@ -353,16 +353,16 @@ Known Issues:
 
 ### Examples
 
-   https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/ExternalDNS
+   https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/ExternalDNS
 
 
 ## IngressLink
 
-Refer https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/IngressLink/README.md
+Refer https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/IngressLink/README.md
 
 ## Policy CRD 
 
-Refer https://github.com/F5Networks/k8s-bigip-ctlr/tree/master/docs/config_examples/customResource/Policy
+Refer https://github.com/F5Networks/k8s-bigip-ctlr/tree/2.x-master/docs/config_examples/customResource/Policy
 
 
 # Note
